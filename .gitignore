@@ -1,0 +1,17 @@
+# Virtual environment
+sound_venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment variables
+.env
+
+# Project folders
+downloads/
+
+# JSON files
+uploaded_recordings_3.json
+uploaded_recordings_2.json
+uploaded_recordings_1.json
