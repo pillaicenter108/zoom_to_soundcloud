@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zoom → SoundCloud Sync</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="page">
+    <div class="card">
+
+      <div class="card-header">
+        <div class="logo-row">
+          <div class="logo zoom-logo">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <rect width="24" height="24" rx="6" fill="#2D8CFF"/>
+              <path d="M4 8.5C4 7.67 4.67 7 5.5 7H13C13.83 7 14.5 7.67 14.5 8.5V15.5C14.5 16.33 13.83 17 13 17H5.5C4.67 17 4 16.33 4 15.5V8.5Z" fill="white"/>
+              <path d="M15.5 10.2L19.5 8V16L15.5 13.8V10.2Z" fill="white"/>
+            </svg>
+          </div>
+          <div class="arrow-icon">→</div>
+          <div class="logo sc-logo">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+              <rect width="24" height="24" rx="6" fill="#FF5500"/>
+              <path d="M4 14.5C4 14.5 4 16 5.5 16C7 16 7 14.5 7 14.5V11C7 11 7 10 6 10C5 10 4.5 10.8 4.5 11.5V14.5H4Z" fill="white"/>
+              <rect x="8" y="9.5" width="1.5" height="6.5" rx="0.75" fill="white"/>
+              <rect x="10.5" y="8" width="1.5" height="8" rx="0.75" fill="white"/>
+              <rect x="13" y="9" width="1.5" height="7" rx="0.75" fill="white"/>
+              <rect x="15.5" y="8.5" width="1.5" height="7.5" rx="0.75" fill="white"/>
+              <rect x="18" y="9.5" width="1.5" height="6.5" rx="0.75" fill="white"/>
+            </svg>
+          </div>
+        </div>
+        <h1 class="title">Zoom → SoundCloud Sync</h1>
+        <p class="subtitle">Upload Zoom cloud recordings to SoundCloud</p>
+      </div>
+
+      <div class="card-body">
+        <div class="form-group">
+          <label class="form-label">Zoom Account</label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="zoom_account" value="1" checked />
+              <span class="radio-custom"></span>
+              <span class="radio-label">Zoom 1</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="zoom_account" value="2" />
+              <span class="radio-custom"></span>
+              <span class="radio-label">Zoom 2</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="zoom_account" value="3" />
+              <span class="radio-custom"></span>
+              <span class="radio-label">Zoom 3</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="from_date">From Date</label>
+            <input type="date" id="from_date" class="date-input" value="2026-03-01" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="to_date">To Date</label>
+            <input type="date" id="to_date" class="date-input" value="2026-04-30" />
+          </div>
+        </div>
+
+        <button class="execute-btn" id="executeBtn" onclick="runSync()">
+          <span id="btnContent">
+            <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Execute Sync
+          </span>
+        </button>
+
+        <div id="resultBox" class="result-box hidden">
+          <div class="result-header">
+            <div class="result-status-badge" id="resultBadge">
+              <span id="resultStatusText">success</span>
+            </div>
+            <span class="result-title">Sync Complete</span>
+          </div>
+          <div class="result-grid">
+            <div class="result-stat">
+              <span class="stat-value" id="meetingsFetched">—</span>
+              <span class="stat-label">Meetings Fetched</span>
+            </div>
+            <div class="result-stat">
+              <span class="stat-value" id="newUploads">—</span>
+              <span class="stat-label">New Uploads</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="errorBox" class="error-box hidden">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">
+            <circle cx="12" cy="12" r="10" stroke="#C0392B" stroke-width="2"/>
+            <path d="M12 7v6M12 16v1" stroke="#C0392B" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+          <span id="errorMsg">Something went wrong. Please try again.</span>
+        </div>
+      </div>
+
+    </div>
+
+    <p class="footer-note">Internal tool — for authorized use only</p>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
