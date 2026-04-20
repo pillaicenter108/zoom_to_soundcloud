@@ -1,3 +1,5 @@
+# app/services/sync_service.py
+
 from app.config import ZOOM_ACCOUNTS
 from app.zoom.auth import get_zoom_token
 from app.zoom.recordings import (
@@ -12,22 +14,60 @@ from app.soundcloud.upload import upload_track
 
 
 def run_sync(choice, from_date, to_date):
+    logs = []
+
+    logs.append("🚀 Starting Zoom → SoundCloud Sync")
+
     zoom = ZOOM_ACCOUNTS.get(choice)
 
     if not zoom:
-        return {"status": "error", "message": "Invalid account"}
+        logs.append("❌ Invalid Zoom account selected")
+        return {
+            "status": "error",
+            "logs": logs,
+            "meetings_fetched": 0,
+            "new_uploads": 0
+        }
 
     uploaded = load_uploaded(choice)
 
+    # Zoom Auth
     zoom_token = get_zoom_token(zoom)
+
+    if not zoom_token:
+        logs.append("❌ Zoom authentication failed")
+        return {
+            "status": "error",
+            "logs": logs,
+            "meetings_fetched": 0,
+            "new_uploads": 0
+        }
+
+    logs.append("✅ Zoom authenticated")
+
+    # SoundCloud Auth
     sc_token = get_sc_token()
 
+    if not sc_token:
+        logs.append("❌ SoundCloud authentication failed")
+        return {
+            "status": "error",
+            "logs": logs,
+            "meetings_fetched": 0,
+            "new_uploads": 0
+        }
+
+    logs.append("✅ SoundCloud authenticated")
+
+    # Fetch Meetings
     meetings = get_recordings(
         zoom_token,
         zoom,
         from_date,
         to_date
     )
+
+    logs.append(f"📥 Meetings fetched: {len(meetings)}")
 
     new_count = 0
 
@@ -44,23 +84,46 @@ def run_sync(choice, from_date, to_date):
 
             rec_id = str(file["id"])
 
+            # Skip already uploaded
             if rec_id in uploaded:
+                logs.append(f"⏭ Already uploaded: {topic}")
                 continue
 
-            file_path = download_audio(zoom_token, meeting, file)
+            # Download
+            file_path = download_audio(
+                zoom_token,
+                meeting,
+                file
+            )
 
             if not file_path:
+                logs.append(f"❌ Download failed: {topic}")
                 continue
 
-            ok = upload_track(sc_token, file_path, topic)
+            logs.append(f"⬇️ Downloaded: {topic}")
+
+            # Upload
+            ok = upload_track(
+                sc_token,
+                file_path,
+                topic
+            )
 
             if ok:
                 uploaded.add(rec_id)
                 save_uploaded(choice, uploaded)
+
+                logs.append(f"🎧 Uploaded: {topic}")
                 new_count += 1
+
+            else:
+                logs.append(f"❌ Upload failed: {topic}")
+
+    logs.append(f"✅ Sync completed | New uploads: {new_count}")
 
     return {
         "status": "success",
+        "logs": logs,
         "meetings_fetched": len(meetings),
         "new_uploads": new_count
     }

@@ -80,7 +80,48 @@ function showResult(data) {
   document.getElementById("meetingsFetched").textContent = data.meetings_fetched ?? "—";
   document.getElementById("newUploads").textContent      = data.new_uploads      ?? "—";
 
+  // Populate scrollable logs
+  const logsBox   = document.getElementById("logs");
+  const logsCount = document.getElementById("logsCount");
+  const logs      = Array.isArray(data.logs) ? data.logs : [];
+
+  logsCount.textContent = `${logs.length} ${logs.length === 1 ? "entry" : "entries"}`;
+
+  if (logs.length === 0) {
+    logsBox.innerHTML = `<span class="logs-empty">No logs returned.</span>`;
+  } else {
+    logsBox.innerHTML = logs.map((log, i) => {
+      // Auto-color log lines by keyword
+      let cls = "log-text";
+      const lower = log.toLowerCase();
+      if (lower.includes("error") || lower.includes("fail") || lower.includes("❌")) cls += " log-error";
+      else if (lower.includes("warn") || lower.includes("skip"))                      cls += " log-warn";
+      else if (lower.includes("upload") || lower.includes("success") || lower.includes("✅")) cls += " log-success";
+      else if (lower.includes("fetch") || lower.includes("found") || lower.includes("info")) cls += " log-info";
+
+      const num = String(i + 1).padStart(2, "0");
+      return `<div class="log-entry">
+        <span class="log-index">${num}</span>
+        <span class="${cls}">${escapeHtml(log)}</span>
+      </div>`;
+    }).join("");
+
+    // Auto-scroll to bottom so latest log is visible
+    logsBox.scrollTop = logsBox.scrollHeight;
+  }
+
   resultBox.classList.remove("hidden");
+}
+
+/**
+ * Escapes HTML special chars to prevent XSS in log output.
+ */
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 /**

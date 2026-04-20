@@ -8,6 +8,7 @@
 </head>
 <body>
   <div class="page">
+
     <div class="card">
 
       <div class="card-header">
@@ -95,6 +96,20 @@
               <span class="stat-label">New Uploads</span>
             </div>
           </div>
+
+          <div class="logs-section">
+            <div class="logs-header">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                <path d="M4 6h16M4 10h16M4 14h10" stroke="#16a34a" stroke-width="2" stroke-linecap="round"/>
+              </svg>
+              <span class="logs-title">Sync Logs</span>
+              <span class="logs-count" id="logsCount">0 entries</span>
+            </div>
+            <div class="logs-box" id="logs">
+              <span class="logs-empty">No logs yet.</span>
+            </div>
+          </div>
+
         </div>
 
         <div id="errorBox" class="error-box hidden">
@@ -112,5 +127,6 @@
   </div>
 
   <script src="script.js"></script>
+
 </body>
 </html>
