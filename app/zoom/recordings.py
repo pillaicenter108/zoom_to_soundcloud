@@ -28,42 +28,72 @@ def save_uploaded(choice, ids):
         json.dump(list(ids), f, indent=2)
 
 def get_recordings(token, zoom, from_date, to_date):
+    from datetime import datetime, timedelta
+    import requests
+
     headers = {
         "Authorization": f"Bearer {token}"
     }
 
     all_meetings = []
-    next_page_token = ""
+    seen_ids = set()
 
-    while True:
-        url = f"https://api.zoom.us/v2/users/{zoom['user_email']}/recordings"
+    start = datetime.strptime(from_date, "%Y-%m-%d")
+    end = datetime.strptime(to_date, "%Y-%m-%d")
 
-        params = {
-            "from": from_date,
-            "to": to_date,
-            "page_size": 300
-        }
+    current = start
 
-        if next_page_token:
-            params["next_page_token"] = next_page_token
+    while current <= end:
 
-        res = requests.get(url, headers=headers, params=params)
+        # use actual current date, not 1st of month
+        month_start = current
 
-        if res.status_code != 200:
-            print("Recording Fetch Failed:", res.text)
-            break
+        if current.month == 12:
+            next_month = current.replace(year=current.year + 1, month=1, day=1)
+        else:
+            next_month = current.replace(month=current.month + 1, day=1)
 
-        data = res.json()
+        month_end = next_month - timedelta(days=1)
 
-        all_meetings.extend(data.get("meetings", []))
+        if month_end > end:
+            month_end = end
 
-        next_page_token = data.get("next_page_token", "")
+        next_page_token = ""
 
-        if not next_page_token:
-            break
+        while True:
+            url = f"https://api.zoom.us/v2/users/{zoom['user_email']}/recordings"
+
+            params = {
+                "from": month_start.strftime("%Y-%m-%d"),
+                "to": month_end.strftime("%Y-%m-%d"),
+                "page_size": 300
+            }
+
+            if next_page_token:
+                params["next_page_token"] = next_page_token
+
+            res = requests.get(url, headers=headers, params=params)
+
+            if res.status_code != 200:
+                break
+
+            data = res.json()
+
+            for meeting in data.get("meetings", []):
+                mid = meeting.get("uuid") or meeting.get("id")
+
+                if mid not in seen_ids:
+                    seen_ids.add(mid)
+                    all_meetings.append(meeting)
+
+            next_page_token = data.get("next_page_token", "")
+
+            if not next_page_token:
+                break
+
+        current = next_month
 
     return all_meetings
-
 def download_audio(token, meeting, file):
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 

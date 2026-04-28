@@ -3,130 +3,393 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zoom → SoundCloud Sync</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>ZS Sync</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: linear-gradient(135deg, #e8f0fe 0%, #dbeafe 50%, #e0f2fe 100%); min-height: 100vh; color: #1a1a2e; }
+
+    /* LOGIN */
+    #loginScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+    .login-card { width: 100%; max-width: 400px; background: #fff; border-radius: 20px; box-shadow: 0 4px 6px rgba(37,99,235,0.06), 0 10px 40px rgba(37,99,235,0.14); overflow: hidden; }
+    .lp-input { width: 100%; padding: 0.65rem 0.95rem; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #f8fafc; font-size: 0.9rem; color: #1e293b; font-family: inherit; transition: all 0.18s ease; outline: none; }
+    .lp-input:focus { border-color: #2563eb; background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    .lp-input.inp-err { border-color: #fca5a5; background: #fef2f2; }
+    .pw-wrap { position: relative; }
+    .pw-wrap .lp-input { padding-right: 2.75rem; }
+    .pw-eye { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #94a3b8; display: flex; align-items: center; padding: 4px; }
+    @keyframes shake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-7px)} 40%{transform:translateX(7px)} 60%{transform:translateX(-4px)} 80%{transform:translateX(4px)} }
+
+    /* APP */
+    #appScreen { display: none; min-height: 100vh; flex-direction: row; }
+    .sidebar { width: 200px; flex-shrink: 0; background: #fff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; padding: 1.25rem 0; position: sticky; top: 0; height: 100vh; box-shadow: 2px 0 12px rgba(37,99,235,0.06); }
+    .sidebar-brand { display: flex; align-items: center; gap: 10px; padding: 0 1.1rem 1.25rem; border-bottom: 1px solid #f1f5f9; margin-bottom: 0.75rem; }
+    .brand-logos { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .brand-logo { width: 24px; height: 24px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+    .brand-arrow { font-size: 10px; color: #94a3b8; }
+    .brand-name { font-size: 0.9rem; font-weight: 700; color: #1e293b; }
+    .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 0 0.6rem; flex: 1; }
+    .nav-item { display: flex; align-items: center; gap: 10px; padding: 0.6rem 0.85rem; border-radius: 10px; font-size: 0.875rem; font-weight: 600; color: #2563eb; background: #eff6ff; text-decoration: none; }
+    .sidebar-footer { padding: 0.75rem 0.6rem 0; border-top: 1px solid #f1f5f9; margin-top: 0.75rem; display: flex; flex-direction: column; gap: 4px; }
+    .sidebar-user { font-size: 0.75rem; font-weight: 600; color: #64748b; padding: 0 0.25rem 0.25rem; }
+    .sidebar-logout { display: flex; align-items: center; gap: 8px; padding: 0.5rem 0.85rem; border-radius: 10px; border: none; background: none; font-size: 0.875rem; font-weight: 500; color: #ef4444; cursor: pointer; font-family: inherit; width: 100%; text-align: left; }
+    .sidebar-logout:hover { background: #fef2f2; }
+    .main-content { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 2.5rem 2rem; }
+    .page-inner { width: 100%; max-width: 480px; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+
+    /* CARD */
+    .card { width: 100%; background: #fff; border-radius: 20px; box-shadow: 0 4px 6px rgba(37,99,235,0.06), 0 10px 40px rgba(37,99,235,0.10); overflow: hidden; }
+    .card-header { background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 60%, #0284c7 100%); padding: 2rem 2rem 1.75rem; text-align: center; }
+    .logo-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 1rem; }
+    .logo { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .arrow-icon { font-size: 18px; color: rgba(255,255,255,0.7); }
+    .title { font-size: 1.5rem; font-weight: 700; color: #fff; margin-bottom: 0.35rem; }
+    .subtitle { font-size: 0.875rem; color: rgba(255,255,255,0.75); }
+    .card-body { padding: 2rem; display: flex; flex-direction: column; gap: 1.5rem; }
+    .form-group { display: flex; flex-direction: column; gap: 0.5rem; flex: 1; }
+    .form-label { font-size: 0.8125rem; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; }
+    .form-row { display: flex; gap: 1rem; }
+    .radio-group { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+    .radio-option { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 0.55rem 1rem; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #f8fafc; transition: all 0.18s ease; flex: 1; min-width: 90px; justify-content: center; user-select: none; }
+    .radio-option input[type="radio"] { display: none; }
+    .radio-option:has(input:checked) { border-color: #93c5fd; background: #eff6ff; box-shadow: 0 0 0 3px rgba(37,99,235,0.08); }
+    .radio-option:has(input:checked) .radio-label { color: #2563eb; font-weight: 600; }
+    .radio-custom { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #cbd5e1; background: #fff; flex-shrink: 0; position: relative; transition: all 0.15s; }
+    .radio-option input:checked ~ .radio-custom { background: #2563eb; border-color: #2563eb; }
+    .radio-custom::after { content:''; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) scale(0); width:6px; height:6px; border-radius:50%; background:#fff; opacity:0; transition:all 0.15s; }
+    .radio-option input:checked ~ .radio-custom::after { opacity:1; transform:translate(-50%,-50%) scale(1); }
+    .radio-label { font-size: 0.875rem; font-weight: 500; color: #475569; }
+    .date-input { width: 100%; padding: 0.6rem 0.85rem; border-radius: 10px; border: 1.5px solid #e2e8f0; background: #f8fafc; font-size: 0.875rem; color: #1e293b; font-family: inherit; outline: none; cursor: pointer; }
+    .date-input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    .execute-btn { width: 100%; padding: 0.85rem 1.5rem; border-radius: 12px; border: none; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: #fff; font-size: 0.9375rem; font-weight: 600; font-family: inherit; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(37,99,235,0.3); transition: all 0.2s; }
+    .execute-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(37,99,235,0.4); }
+    .execute-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+    #btnContent, #btnTxt { display: flex; align-items: center; gap: 8px; }
+    .spinner { width:16px; height:16px; border:2.5px solid rgba(255,255,255,0.35); border-top-color:#fff; border-radius:50%; animation:spin 0.7s linear infinite; flex-shrink:0; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .result-box { border-radius: 12px; border: 1.5px solid #bbf7d0; background: #f0fdf4; padding: 1.25rem 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+    .result-header { display: flex; align-items: center; gap: 10px; }
+    .result-status-badge { padding: 3px 10px; border-radius: 20px; background: #dcfce7; border: 1px solid #86efac; font-size: 0.75rem; font-weight: 700; color: #15803d; text-transform: uppercase; }
+    .result-title { font-size: 0.9375rem; font-weight: 600; color: #166534; }
+    .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .result-stat { background: #fff; border-radius: 10px; padding: 0.875rem 1rem; display: flex; flex-direction: column; gap: 4px; border: 1px solid #d1fae5; }
+    .stat-value { font-size: 1.75rem; font-weight: 700; color: #1e293b; line-height: 1; }
+    .stat-label { font-size: 0.75rem; color: #64748b; font-weight: 500; }
+    .logs-section { display: flex; flex-direction: column; gap: 0; margin-top: 0.25rem; }
+    .logs-header { display: flex; align-items: center; gap: 6px; padding: 0.5rem 0; border-top: 1px dashed #bbf7d0; margin-top: 0.25rem; }
+    .logs-title { font-size: 0.75rem; font-weight: 700; color: #1e40af; text-transform: uppercase; flex: 1; }
+    .logs-count { font-size: 0.7rem; font-weight: 600; color: #2563eb; background: #dbeafe; border-radius: 20px; padding: 2px 9px; }
+    .logs-box { height: 200px; overflow-y: auto; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 10px; padding: 0.75rem 1rem; font-size: 0.8rem; line-height: 1.75; color: #475569; display: flex; flex-direction: column; }
+    .log-entry { display: flex; gap: 10px; align-items: flex-start; padding: 2px 0; border-bottom: 1px solid #f1f5f9; word-break: break-word; }
+    .log-index { color: #cbd5e1; font-size: 0.7rem; min-width: 22px; flex-shrink: 0; }
+    .log-text { color: #475569; flex: 1; }
+    .log-text.log-success { color: #16a34a; }
+    .log-text.log-error { color: #dc2626; }
+    .log-text.log-warn { color: #d97706; }
+    .log-text.log-info { color: #2563eb; }
+    .logs-empty { color: #94a3b8; font-style: italic; font-size: 0.775rem; margin: auto; text-align: center; }
+    .error-box { border-radius: 12px; border: 1.5px solid #fecaca; background: #fef2f2; padding: 1rem 1.25rem; display: flex; align-items: flex-start; gap: 10px; font-size: 0.875rem; color: #b91c1c; font-weight: 500; }
+    .hidden { display: none !important; }
+    .footer-note { font-size: 0.75rem; color: rgba(30,41,59,0.4); text-align: center; width: 100%; }
+    @keyframes slideIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+  </style>
 </head>
 <body>
-  <div class="page">
 
-    <div class="card">
-
-      <div class="card-header">
-        <div class="logo-row">
-          <div class="logo zoom-logo">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <rect width="24" height="24" rx="6" fill="#2D8CFF"/>
-              <path d="M4 8.5C4 7.67 4.67 7 5.5 7H13C13.83 7 14.5 7.67 14.5 8.5V15.5C14.5 16.33 13.83 17 13 17H5.5C4.67 17 4 16.33 4 15.5V8.5Z" fill="white"/>
-              <path d="M15.5 10.2L19.5 8V16L15.5 13.8V10.2Z" fill="white"/>
-            </svg>
-          </div>
-          <div class="arrow-icon">→</div>
-          <div class="logo sc-logo">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <rect width="24" height="24" rx="6" fill="#FF5500"/>
-              <path d="M4 14.5C4 14.5 4 16 5.5 16C7 16 7 14.5 7 14.5V11C7 11 7 10 6 10C5 10 4.5 10.8 4.5 11.5V14.5H4Z" fill="white"/>
-              <rect x="8" y="9.5" width="1.5" height="6.5" rx="0.75" fill="white"/>
-              <rect x="10.5" y="8" width="1.5" height="8" rx="0.75" fill="white"/>
-              <rect x="13" y="9" width="1.5" height="7" rx="0.75" fill="white"/>
-              <rect x="15.5" y="8.5" width="1.5" height="7.5" rx="0.75" fill="white"/>
-              <rect x="18" y="9.5" width="1.5" height="6.5" rx="0.75" fill="white"/>
-            </svg>
-          </div>
+<!-- ===== LOGIN ===== -->
+<div id="loginScreen">
+  <div class="login-card" id="loginCard">
+    <div class="card-header">
+      <div class="logo-row">
+        <div class="logo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#2D8CFF"/><path d="M4 8.5C4 7.67 4.67 7 5.5 7H13C13.83 7 14.5 7.67 14.5 8.5V15.5C14.5 16.33 13.83 17 13 17H5.5C4.67 17 4 16.33 4 15.5V8.5Z" fill="white"/><path d="M15.5 10.2L19.5 8V16L15.5 13.8V10.2Z" fill="white"/></svg>
         </div>
-        <h1 class="title">Zoom → SoundCloud Sync</h1>
-        <p class="subtitle">Upload Zoom cloud recordings to SoundCloud</p>
-      </div>
-
-      <div class="card-body">
-        <div class="form-group">
-          <label class="form-label">Zoom Account</label>
-          <div class="radio-group">
-            <label class="radio-option">
-              <input type="radio" name="zoom_account" value="1" checked />
-              <span class="radio-custom"></span>
-              <span class="radio-label">Zoom 1</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="zoom_account" value="2" />
-              <span class="radio-custom"></span>
-              <span class="radio-label">Zoom 2</span>
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="zoom_account" value="3" />
-              <span class="radio-custom"></span>
-              <span class="radio-label">Zoom 3</span>
-            </label>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label class="form-label" for="from_date">From Date</label>
-            <input type="date" id="from_date" class="date-input" value="2026-03-01" />
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="to_date">To Date</label>
-            <input type="date" id="to_date" class="date-input" value="2026-04-30" />
-          </div>
-        </div>
-
-        <button class="execute-btn" id="executeBtn" onclick="runSync()">
-          <span id="btnContent">
-            <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            Execute Sync
-          </span>
-        </button>
-
-        <div id="resultBox" class="result-box hidden">
-          <div class="result-header">
-            <div class="result-status-badge" id="resultBadge">
-              <span id="resultStatusText">success</span>
-            </div>
-            <span class="result-title">Sync Complete</span>
-          </div>
-          <div class="result-grid">
-            <div class="result-stat">
-              <span class="stat-value" id="meetingsFetched">—</span>
-              <span class="stat-label">Meetings Fetched</span>
-            </div>
-            <div class="result-stat">
-              <span class="stat-value" id="newUploads">—</span>
-              <span class="stat-label">New Uploads</span>
-            </div>
-          </div>
-
-          <div class="logs-section">
-            <div class="logs-header">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
-                <path d="M4 6h16M4 10h16M4 14h10" stroke="#16a34a" stroke-width="2" stroke-linecap="round"/>
-              </svg>
-              <span class="logs-title">Sync Logs</span>
-              <span class="logs-count" id="logsCount">0 entries</span>
-            </div>
-            <div class="logs-box" id="logs">
-              <span class="logs-empty">No logs yet.</span>
-            </div>
-          </div>
-
-        </div>
-
-        <div id="errorBox" class="error-box hidden">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0">
-            <circle cx="12" cy="12" r="10" stroke="#C0392B" stroke-width="2"/>
-            <path d="M12 7v6M12 16v1" stroke="#C0392B" stroke-width="2.5" stroke-linecap="round"/>
-          </svg>
-          <span id="errorMsg">Something went wrong. Please try again.</span>
+        <div class="arrow-icon">→</div>
+        <div class="logo">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#FF5500"/><path d="M4 14.5C4 14.5 4 16 5.5 16C7 16 7 14.5 7 14.5V11C7 11 7 10 6 10C5 10 4.5 10.8 4.5 11.5V14.5H4Z" fill="white"/><rect x="8" y="9.5" width="1.5" height="6.5" rx="0.75" fill="white"/><rect x="10.5" y="8" width="1.5" height="8" rx="0.75" fill="white"/><rect x="13" y="9" width="1.5" height="7" rx="0.75" fill="white"/><rect x="15.5" y="8.5" width="1.5" height="7.5" rx="0.75" fill="white"/><rect x="18" y="9.5" width="1.5" height="6.5" rx="0.75" fill="white"/></svg>
         </div>
       </div>
-
+      <h1 class="title">Welcome Back</h1>
+      <p class="subtitle">Sign in to access ZS Sync</p>
     </div>
-
-    <p class="footer-note">Internal tool — for authorized use only</p>
+    <div class="card-body">
+      <div class="form-group">
+        <label class="form-label" for="u">Username</label>
+        <input class="lp-input" type="text" id="u" placeholder="Enter username" autocomplete="username" autocapitalize="none" spellcheck="false" />
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="p">Password</label>
+        <div class="pw-wrap">
+          <input class="lp-input" type="password" id="p" placeholder="Enter password" />
+          <button class="pw-eye" type="button" onclick="togglePw()">
+            <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="errBox" class="error-box" style="display:none;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><circle cx="12" cy="12" r="10" stroke="#C0392B" stroke-width="2"/><path d="M12 7v6M12 16v1" stroke="#C0392B" stroke-width="2.5" stroke-linecap="round"/></svg>
+        <span id="errMsg">Invalid username or password.</span>
+      </div>
+      <button class="execute-btn" id="loginBtn" onclick="doLogin()">
+        <span id="btnTxt">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Sign In
+        </span>
+      </button>
+      <p style="text-align:center;font-size:0.775rem;color:#94a3b8;margin-top:-0.25rem;">Internal tool — authorized personnel only</p>
+    </div>
   </div>
+</div>
 
-  <script src="script.js"></script>
+<!-- ===== APP ===== -->
+<div id="appScreen">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-logos">
+        <div class="brand-logo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#2D8CFF"/><path d="M4 8.5C4 7.67 4.67 7 5.5 7H13C13.83 7 14.5 7.67 14.5 8.5V15.5C14.5 16.33 13.83 17 13 17H5.5C4.67 17 4 16.33 4 15.5V8.5Z" fill="white"/><path d="M15.5 10.2L19.5 8V16L15.5 13.8V10.2Z" fill="white"/></svg></div>
+        <span class="brand-arrow">→</span>
+        <div class="brand-logo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#FF5500"/><path d="M4 14.5C4 14.5 4 16 5.5 16C7 16 7 14.5 7 14.5V11C7 11 7 10 6 10C5 10 4.5 10.8 4.5 11.5V14.5H4Z" fill="white"/><rect x="8" y="9.5" width="1.5" height="6.5" rx="0.75" fill="white"/><rect x="10.5" y="8" width="1.5" height="8" rx="0.75" fill="white"/><rect x="13" y="9" width="1.5" height="7" rx="0.75" fill="white"/><rect x="15.5" y="8.5" width="1.5" height="7.5" rx="0.75" fill="white"/><rect x="18" y="9.5" width="1.5" height="6.5" rx="0.75" fill="white"/></svg></div>
+      </div>
+      <span class="brand-name">ZS Sync</span>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none"><path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span>Sync</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="sidebar-user" id="sidebarUser">pc-admin</div>
+      <button class="sidebar-logout" onclick="doLogout()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Sign out
+      </button>
+    </div>
+  </aside>
+  <main class="main-content">
+    <div class="page-inner">
+      <div class="card">
+        <div class="card-header">
+          <div class="logo-row">
+            <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#2D8CFF"/><path d="M4 8.5C4 7.67 4.67 7 5.5 7H13C13.83 7 14.5 7.67 14.5 8.5V15.5C14.5 16.33 13.83 17 13 17H5.5C4.67 17 4 16.33 4 15.5V8.5Z" fill="white"/><path d="M15.5 10.2L19.5 8V16L15.5 13.8V10.2Z" fill="white"/></svg></div>
+            <div class="arrow-icon">→</div>
+            <div class="logo"><svg width="22" height="22" viewBox="0 0 24 24" fill="none"><rect width="24" height="24" rx="6" fill="#FF5500"/><path d="M4 14.5C4 14.5 4 16 5.5 16C7 16 7 14.5 7 14.5V11C7 11 7 10 6 10C5 10 4.5 10.8 4.5 11.5V14.5H4Z" fill="white"/><rect x="8" y="9.5" width="1.5" height="6.5" rx="0.75" fill="white"/><rect x="10.5" y="8" width="1.5" height="8" rx="0.75" fill="white"/><rect x="13" y="9" width="1.5" height="7" rx="0.75" fill="white"/><rect x="15.5" y="8.5" width="1.5" height="7.5" rx="0.75" fill="white"/><rect x="18" y="9.5" width="1.5" height="6.5" rx="0.75" fill="white"/></svg></div>
+          </div>
+          <h1 class="title">Zoom → SoundCloud Sync</h1>
+          <p class="subtitle">Upload Zoom cloud recordings to SoundCloud</p>
+        </div>
+        <div class="card-body">
+          <div class="form-group">
+            <label class="form-label">Zoom Account</label>
+            <div class="radio-group">
+              <label class="radio-option"><input type="radio" name="zoom_account" value="1" checked /><span class="radio-custom"></span><span class="radio-label">Zoom 1</span></label>
+              <label class="radio-option"><input type="radio" name="zoom_account" value="2" /><span class="radio-custom"></span><span class="radio-label">Zoom 2</span></label>
+              <label class="radio-option"><input type="radio" name="zoom_account" value="3" /><span class="radio-custom"></span><span class="radio-label">Zoom 3</span></label>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="from_date">From Date</label>
+              <input type="date" id="from_date" class="date-input" value="2026-03-01" />
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="to_date">To Date</label>
+              <input type="date" id="to_date" class="date-input" value="2026-04-30" />
+            </div>
+          </div>
+          <button class="execute-btn" id="executeBtn" onclick="runSync()">
+            <span id="btnContent">
+              <svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              Execute Sync
+            </span>
+          </button>
+          <div id="resultBox" class="result-box hidden">
+            <div class="result-header">
+              <div class="result-status-badge" id="resultBadge"><span id="resultStatusText">success</span></div>
+              <span class="result-title">Sync Complete</span>
+            </div>
+            <div class="result-grid">
+              <div class="result-stat"><span class="stat-value" id="meetingsFetched">—</span><span class="stat-label">Meetings Fetched</span></div>
+              <div class="result-stat"><span class="stat-value" id="newUploads">—</span><span class="stat-label">New Uploads</span></div>
+            </div>
+            <div class="logs-section">
+              <div class="logs-header">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none"><path d="M4 6h16M4 10h16M4 14h10" stroke="#2563eb" stroke-width="2" stroke-linecap="round"/></svg>
+                <span class="logs-title">Sync Logs</span>
+                <span class="logs-count" id="logsCount">0 entries</span>
+              </div>
+              <div class="logs-box" id="logs"><span class="logs-empty">No logs yet.</span></div>
+            </div>
+          </div>
+          <div id="errorBox" class="error-box hidden">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><circle cx="12" cy="12" r="10" stroke="#C0392B" stroke-width="2"/><path d="M12 7v6M12 16v1" stroke="#C0392B" stroke-width="2.5" stroke-linecap="round"/></svg>
+            <span id="errorMsg">Something went wrong.</span>
+          </div>
+        </div>
+      </div>
+      <p class="footer-note">Internal tool — for authorized use only</p>
+    </div>
+  </main>
+</div>
 
+<script>
+  // Always show login first — no session persistence
+  document.getElementById("loginScreen").style.display = "flex";
+  document.getElementById("appScreen").style.display   = "none";
+
+  function doLogin() {
+    var u   = document.getElementById("u").value.trim();
+    var p   = document.getElementById("p").value;
+    var err = document.getElementById("errBox");
+    var msg = document.getElementById("errMsg");
+    var uEl = document.getElementById("u");
+    var pEl = document.getElementById("p");
+
+    err.style.display = "none";
+    uEl.classList.remove("inp-err");
+    pEl.classList.remove("inp-err");
+
+    if (!u || !p) {
+      msg.textContent = "Please enter both username and password.";
+      err.style.display = "flex";
+      if (!u) uEl.classList.add("inp-err");
+      if (!p) pEl.classList.add("inp-err");
+      return;
+    }
+
+    if (u === "pc-admin" && p === "admin108") {
+      document.getElementById("btnTxt").innerHTML = '<div class="spinner"></div> Signing in...';
+      document.getElementById("loginBtn").disabled = true;
+      setTimeout(function() {
+        document.getElementById("loginScreen").style.display = "none";
+        document.getElementById("appScreen").style.display   = "flex";
+        document.getElementById("sidebarUser").textContent   = u;
+      }, 600);
+    } else {
+      msg.textContent = "Invalid username or password.";
+      err.style.display = "flex";
+      pEl.classList.add("inp-err");
+      pEl.value = "";
+      pEl.focus();
+      var card = document.getElementById("loginCard");
+      card.style.animation = "none";
+      void card.offsetWidth;
+      card.style.animation = "shake 0.4s ease";
+    }
+  }
+
+  function doLogout() {
+    if (confirm("Are you sure you want to sign out?")) {
+      document.getElementById("appScreen").style.display   = "none";
+      document.getElementById("loginScreen").style.display = "flex";
+      document.getElementById("u").value = "";
+      document.getElementById("p").value = "";
+      document.getElementById("errBox").style.display = "none";
+      document.getElementById("loginBtn").disabled = false;
+      document.getElementById("btnTxt").innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex-shrink:0"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Sign In';
+    }
+  }
+
+  function togglePw() {
+    var pw = document.getElementById("p");
+    var icon = document.getElementById("eyeIcon");
+    if (pw.type === "password") {
+      pw.type = "text";
+      icon.innerHTML = '<path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="1" y1="1" x2="23" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+    } else {
+      pw.type = "password";
+      icon.innerHTML = '<path d="M2 12C2 12 5 5 12 5C19 5 22 12 22 12C22 12 19 19 12 19C5 19 2 12 2 12Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>';
+    }
+  }
+
+  document.addEventListener("keydown", function(e) {
+    if (e.key === "Enter" && document.getElementById("loginScreen").style.display === "flex") {
+      doLogin();
+    }
+  });
+
+  // ── Sync logic ──
+  var API_URL = "http://127.0.0.1:8000/sync";
+
+  function escapeHtml(str) {
+    return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  function logColorClass(log) {
+    var l = log.toLowerCase();
+    if (l.includes("error") || l.includes("fail") || l.includes("❌")) return "log-error";
+    if (l.includes("warn")  || l.includes("skip"))                       return "log-warn";
+    if (l.includes("upload")|| l.includes("success")|| l.includes("✅")) return "log-success";
+    if (l.includes("fetch") || l.includes("found")  || l.includes("info"))return "log-info";
+    return "";
+  }
+
+  function setLoading(on) {
+    document.getElementById("executeBtn").disabled = on;
+    document.getElementById("btnContent").innerHTML = on
+      ? '<div class="spinner"></div> Running Sync...'
+      : '<svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Execute Sync';
+  }
+
+  function showResult(data) {
+    var badge = document.getElementById("resultBadge");
+    var ok = data.status === "success";
+    document.getElementById("resultStatusText").textContent = data.status || "success";
+    badge.style.background  = ok ? "#dcfce7" : "#fef9c3";
+    badge.style.borderColor = ok ? "#86efac" : "#fde047";
+    badge.style.color       = ok ? "#15803d" : "#a16207";
+    document.getElementById("meetingsFetched").textContent = data.meetings_fetched != null ? data.meetings_fetched : "—";
+    document.getElementById("newUploads").textContent      = data.new_uploads      != null ? data.new_uploads      : "—";
+    var logs = Array.isArray(data.logs) ? data.logs : [];
+    document.getElementById("logsCount").textContent = logs.length + (logs.length === 1 ? " entry" : " entries");
+    var logsBox = document.getElementById("logs");
+    logsBox.innerHTML = logs.length === 0
+      ? '<span class="logs-empty">No logs returned.</span>'
+      : logs.map(function(log, i) {
+          return '<div class="log-entry"><span class="log-index">' + String(i+1).padStart(2,"0") + '</span><span class="log-text ' + logColorClass(log) + '">' + escapeHtml(log) + '</span></div>';
+        }).join("");
+    logsBox.scrollTop = logsBox.scrollHeight;
+    document.getElementById("resultBox").classList.remove("hidden");
+    document.getElementById("errorBox").classList.add("hidden");
+  }
+
+  function showError(msg) {
+    document.getElementById("errorMsg").textContent = msg;
+    document.getElementById("errorBox").classList.remove("hidden");
+    document.getElementById("resultBox").classList.add("hidden");
+  }
+
+  async function runSync() {
+    var fromDate = document.getElementById("from_date").value;
+    var toDate   = document.getElementById("to_date").value;
+    var account  = document.querySelector('input[name="zoom_account"]:checked').value;
+
+    if (!fromDate) { showError("Please select a From Date."); return; }
+    if (!toDate)   { showError("Please select a To Date."); return; }
+    if (fromDate > toDate) { showError("From Date must be on or before To Date."); return; }
+
+    setLoading(true);
+    try {
+      var response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ zoom_account: account, from_date: fromDate, to_date: toDate })
+      });
+      if (!response.ok) {
+        var detail = "Server error: " + response.status + " " + response.statusText;
+        try { var eb = await response.json(); if (eb.detail) detail = eb.detail; } catch(e) {}
+        throw new Error(detail);
+      }
+      showResult(await response.json());
+    } catch(err) {
+      showError(err.name === "TypeError" ? "Cannot reach the server. Make sure the backend is running at " + API_URL : (err.message || "An unexpected error occurred."));
+    } finally {
+      setLoading(false);
+    }
+  }
+</script>
 </body>
 </html>
