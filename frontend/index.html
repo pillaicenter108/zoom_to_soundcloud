@@ -311,8 +311,13 @@
     }
   });
 
-  // ── Sync logic ──
-  var API_URL = "http://127.0.0.1:8000/sync";
+  // ── Sync logic (background job + polling) ───────────────────────────────
+  var BASE_URL   = "http://127.0.0.1:8000";
+  var SYNC_URL   = BASE_URL + "/sync";
+  var POLL_MS    = 2000;
+  var pollTimer  = null;
+
+  function statusUrl(jobId) { return BASE_URL + "/status/" + jobId; }
 
   function escapeHtml(str) {
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -327,11 +332,30 @@
     return "";
   }
 
-  function setLoading(on) {
+  function setLoading(on, label) {
+    label = label || "Running Sync…";
     document.getElementById("executeBtn").disabled = on;
     document.getElementById("btnContent").innerHTML = on
-      ? '<div class="spinner"></div> Running Sync...'
+      ? '<div class="spinner"></div> ' + label
       : '<svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Execute Sync';
+  }
+
+  function showRunning() {
+    var badge = document.getElementById("resultBadge");
+    document.getElementById("resultStatusText").textContent = "running";
+    badge.style.background  = "#dbeafe";
+    badge.style.borderColor = "#93c5fd";
+    badge.style.color       = "#1d4ed8";
+    document.getElementById("meetingsFetched").textContent = "…";
+    document.getElementById("newUploads").textContent      = "…";
+    document.getElementById("logsCount").textContent       = "polling…";
+    document.getElementById("logs").innerHTML =
+      '<span class="logs-empty" style="color:#2563eb;">' +
+        '<div class="spinner" style="border-top-color:#2563eb;border-color:rgba(37,99,235,0.25);margin:0 auto 6px;"></div>' +
+        'Sync is running in the background…' +
+      '</span>';
+    document.getElementById("resultBox").classList.remove("hidden");
+    document.getElementById("errorBox").classList.add("hidden");
   }
 
   function showResult(data) {
@@ -362,7 +386,38 @@
     document.getElementById("resultBox").classList.add("hidden");
   }
 
+  function stopPolling() {
+    if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+  }
+
+  function startPolling(jobId) {
+    stopPolling();
+    showRunning();
+    pollTimer = setInterval(async function() {
+      try {
+        var res = await fetch(statusUrl(jobId));
+        if (!res.ok) throw new Error("Status check failed: " + res.status);
+        var data = await res.json();
+        if (data.status === "success" || data.status === "error") {
+          stopPolling();
+          setLoading(false);
+          if (data.status === "error") showError(data.error || "Sync failed with an unknown error.");
+          else showResult(data);
+        }
+        // "pending" / "running" → keep polling
+      } catch(err) {
+        stopPolling();
+        setLoading(false);
+        showError("Lost contact with the server while polling. " + err.message);
+      }
+    }, POLL_MS);
+  }
+
   async function runSync() {
+    document.getElementById("resultBox").classList.add("hidden");
+    document.getElementById("errorBox").classList.add("hidden");
+    stopPolling();
+
     var fromDate = document.getElementById("from_date").value;
     var toDate   = document.getElementById("to_date").value;
     var account  = document.querySelector('input[name="zoom_account"]:checked').value;
@@ -371,9 +426,9 @@
     if (!toDate)   { showError("Please select a To Date."); return; }
     if (fromDate > toDate) { showError("From Date must be on or before To Date."); return; }
 
-    setLoading(true);
+    setLoading(true, "Starting Sync…");
     try {
-      var response = await fetch(API_URL, {
+      var response = await fetch(SYNC_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ zoom_account: account, from_date: fromDate, to_date: toDate })
@@ -383,11 +438,12 @@
         try { var eb = await response.json(); if (eb.detail) detail = eb.detail; } catch(e) {}
         throw new Error(detail);
       }
-      showResult(await response.json());
+      var job = await response.json();
+      setLoading(true, "Sync Running…");
+      startPolling(job.job_id);
     } catch(err) {
-      showError(err.name === "TypeError" ? "Cannot reach the server. Make sure the backend is running at " + API_URL : (err.message || "An unexpected error occurred."));
-    } finally {
       setLoading(false);
+      showError(err.name === "TypeError" ? "Cannot reach the server. Make sure the backend is running at " + BASE_URL : (err.message || "An unexpected error occurred."));
     }
   }
 </script>
