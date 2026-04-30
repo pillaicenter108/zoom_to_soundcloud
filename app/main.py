@@ -14,13 +14,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── In-memory job store ──────────────────────────────────────────────────────
-# Structure per job_id:
-#   { status: "pending"|"running"|"success"|"error",
-#     meetings_fetched: int|None,
-#     new_uploads: int|None,
-#     logs: list[str],
-#     error: str|None }
+# ── In-memory job store ───────────────────────────────────────────────────────
+# logs is a SHARED LIST — sync_service appends to it live, status endpoint
+# reads it live. No copy is made until the job finishes.
 jobs: dict[str, dict] = {}
 
 
@@ -31,32 +27,33 @@ class SyncRequest(BaseModel):
 
 
 def _run_job(job_id: str, zoom_account: str, from_date: str, to_date: str):
-    """Executed in a background thread. Calls run_sync and stores results."""
-    jobs[job_id]["status"] = "running"
+    """Runs in a background thread. Passes the live logs list into run_sync
+    so every append is immediately visible via /status."""
+    job = jobs[job_id]
+    job["status"] = "running"
+    live_logs = job["logs"]          # same list object — mutations are instant
+
     try:
-        result = run_sync(zoom_account, from_date, to_date)
-        jobs[job_id].update({
-            "status": result.get("status", "success"),
-            "meetings_fetched": result.get("meetings_fetched"),
-            "new_uploads": result.get("new_uploads"),
-            "logs": result.get("logs", []),
-        })
+        result = run_sync(zoom_account, from_date, to_date, live_logs)
+        job["status"]           = result.get("status", "success")
+        job["meetings_fetched"] = result.get("meetings_fetched")
+        job["new_uploads"]      = result.get("new_uploads")
+        # live_logs is already up to date — no need to overwrite
     except Exception as exc:
-        jobs[job_id].update({
-            "status": "error",
-            "error": str(exc),
-        })
+        job["status"] = "error"
+        job["error"]  = str(exc)
+        live_logs.append(f"❌ Unexpected error: {exc}")
 
 
 @app.post("/sync")
 def sync(req: SyncRequest):
-    """Start a background sync job and return a job_id immediately."""
+    """Kicks off a background sync and returns a job_id immediately."""
     job_id = str(uuid.uuid4())
     jobs[job_id] = {
         "status": "pending",
         "meetings_fetched": None,
         "new_uploads": None,
-        "logs": [],
+        "logs": [],          # live list — shared with the worker thread
         "error": None,
     }
     thread = threading.Thread(
@@ -70,7 +67,7 @@ def sync(req: SyncRequest):
 
 @app.get("/status/{job_id}")
 def status(job_id: str):
-    """Poll this endpoint to get the current state of a sync job."""
+    """Returns current job state including all logs appended so far."""
     job = jobs.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")

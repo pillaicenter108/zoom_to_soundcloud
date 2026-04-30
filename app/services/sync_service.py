@@ -14,8 +14,12 @@ from app.soundcloud.upload import upload_track
 from app.services.cleanup_service import cleanup_downloads
 
 
-def run_sync(choice, from_date, to_date):
-    logs = []
+def run_sync(choice, from_date, to_date, logs: list = None):
+    # Accept a shared live list from the caller (main.py background thread)
+    # so every append is instantly visible via /status — fall back to a local
+    # list when called directly (e.g. tests or CLI).
+    if logs is None:
+        logs = []
 
     logs.append("🚀 Starting Zoom → SoundCloud Sync")
 
@@ -61,73 +65,61 @@ def run_sync(choice, from_date, to_date):
     logs.append("✅ SoundCloud authenticated")
 
     # Fetch Meetings
-    meetings = get_recordings(
-        zoom_token,
-        zoom,
-        from_date,
-        to_date
-    )
+    meetings = get_recordings(zoom_token, zoom, from_date, to_date)
 
     logs.append(f"📥 Meetings fetched: {len(meetings)}")
 
     new_count = 0
+    recordings_fetched = 0
 
-    try:
-        for meeting in meetings:
-            topic = clean_name(meeting.get("topic", "meeting"))
+    for meeting in meetings:
+        topic = clean_name(meeting.get("topic", "meeting"))
 
-            for file in meeting.get("recording_files", []):
+        for file in meeting.get("recording_files", []):
 
-                if file.get("status") != "completed":
-                    continue
+            if file.get("status") != "completed":
+                continue
 
-                if file.get("file_type", "").lower() not in ["m4a", "mp3"]:
-                    continue
+            if file.get("file_type", "").lower() not in ["m4a", "mp3"]:
+                continue
 
-                rec_id = str(file["id"])
+            recordings_fetched += 1
 
-                # Skip already uploaded
-                if rec_id in uploaded:
-                    logs.append(f"⏭ Already uploaded: {topic}")
-                    continue
+            rec_id = str(file["id"])
 
-                # Download
-                file_path = download_audio(
-                    zoom_token,
-                    meeting,
-                    file
-                )
+            if rec_id in uploaded:
+                logs.append(f"⏭ Already uploaded: {topic}")
+                continue
 
-                if not file_path:
-                    logs.append(f"❌ Download failed: {topic}")
-                    continue
+            # Download
+            file_path = download_audio(zoom_token, meeting, file)
 
-                logs.append(f"⬇️ Downloaded: {topic}")
+            if not file_path:
+                logs.append(f"❌ Download failed: {topic}")
+                continue
 
-                # Upload
-                ok = upload_track(
-                    sc_token,
-                    file_path,
-                    topic
-                )
+            logs.append(f"⬇️ Downloaded: {topic}")
 
-                if ok:
-                    uploaded.add(rec_id)
-                    save_uploaded(choice, uploaded)
-                    logs.append(f"🎧 Uploaded: {topic}")
-                    new_count += 1
-                else:
-                    logs.append(f"❌ Upload failed: {topic}")
+            # Upload
+            ok = upload_track(sc_token, file_path, topic)
 
-    finally:
-        # Always clean up downloads/ — even if an upload crashed mid-way
-        cleanup_downloads(logs)
+            if ok:
+                uploaded.add(rec_id)
+                save_uploaded(choice, uploaded)
+                logs.append(f"🎧 Uploaded: {topic}")
+                new_count += 1
+            else:
+                logs.append(f"❌ Upload failed: {topic}")
 
     logs.append(f"✅ Sync completed | New uploads: {new_count}")
+
+    # Silently clean up downloads folder in a background thread — no logs
+    import threading
+    threading.Thread(target=cleanup_downloads, args=([],), daemon=True).start()
 
     return {
         "status": "success",
         "logs": logs,
-        "meetings_fetched": len(meetings),
+        "meetings_fetched": recordings_fetched,
         "new_uploads": new_count
     }

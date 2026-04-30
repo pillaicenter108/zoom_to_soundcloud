@@ -2,23 +2,21 @@ const BASE_URL   = "http://127.0.0.1:8000";
 const SYNC_URL   = `${BASE_URL}/sync`;
 const STATUS_URL = (jobId) => `${BASE_URL}/status/${jobId}`;
 
-// ── Exponential backoff schedule (stays well under 100 req/hr CF limit) ──
-// Poll 1-3  →  5s   (quick feedback for fast syncs)
-// Poll 4-6  → 15s   (medium syncs)
-// Poll 7+   → 60s   (long syncs — max ~60 req/hr)
+// ── Exponential backoff schedule (well under 100 req/hr CF limit) ─────────
+// Poll 1-3  →  5s   Poll 4-6  → 15s   Poll 7+  → 60s
 const POLL_SCHEDULE = [5000, 5000, 5000, 15000, 15000, 15000];
 const POLL_MAX_MS   = 60000;
 
-let pollTimer = null; // active setTimeout id
-let pollCount = 0;    // number of polls fired so far
+let pollTimer = null;
+let pollCount = 0;
 
-// ── DOM refs ─────────────────────────────────────────────────────────────────
+// ── DOM refs ──────────────────────────────────────────────────────────────
 const executeBtn = document.getElementById("executeBtn");
 const resultBox  = document.getElementById("resultBox");
 const errorBox   = document.getElementById("errorBox");
 const errorMsg   = document.getElementById("errorMsg");
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────
 function getFormData() {
   return {
     zoom_account: document.querySelector('input[name="zoom_account"]:checked').value,
@@ -65,15 +63,73 @@ function logColorClass(log) {
   return "";
 }
 
-// ── Render result card ────────────────────────────────────────────────────────
-function showResult(data) {
-  const badge      = document.getElementById("resultBadge");
-  const statusText = document.getElementById("resultStatusText");
-  const logsBox    = document.getElementById("logs");
-  const logsCount  = document.getElementById("logsCount");
+function nextDelay() {
+  return POLL_SCHEDULE[pollCount] !== undefined ? POLL_SCHEDULE[pollCount] : POLL_MAX_MS;
+}
 
-  const ok = data.status === "success";
-  statusText.textContent  = data.status || "success";
+// ── Smart activity message from latest log ────────────────────────────────
+function latestActivityMsg(logs, nextSec) {
+  if (!logs || logs.length === 0) return "Starting sync…";
+  const last = logs[logs.length - 1].toLowerCase();
+  if (last.includes("zoom auth"))       return "Authenticating with Zoom…";
+  if (last.includes("soundcloud auth")) return "Authenticating with SoundCloud…";
+  if (last.includes("meetings fetched"))return "Fetching recordings list…";
+  if (last.includes("⬇️") || last.includes("downloaded")) return "Downloading recording…";
+  if (last.includes("🎧") || last.includes("uploaded"))   return "Uploading to SoundCloud…";
+  if (last.includes("⏭") || last.includes("already"))    return "Checking recordings…";
+  if (last.includes("❌"))              return "Handling an error…";
+  return `Next check in ${nextSec}s…`;
+}
+
+// ── Render logs (works for both live/partial and final) ───────────────────
+function renderLogs(logs, isRunning) {
+  const logsBox   = document.getElementById("logs");
+  const logsCount = document.getElementById("logsCount");
+  const nextSec   = Math.round(nextDelay() / 1000);
+
+  logsCount.textContent = isRunning
+    ? `${logs.length} so far — next check in ${nextSec}s`
+    : `${logs.length} ${logs.length === 1 ? "entry" : "entries"}`;
+
+  const actMsg = document.getElementById("activityMsg");
+  if (actMsg) actMsg.textContent = isRunning ? latestActivityMsg(logs, nextSec) : "";
+
+  if (logs.length === 0) {
+    logsBox.innerHTML = `<span class="logs-empty" style="color:#2563eb;">
+      <div class="spinner" style="border-top-color:#2563eb;border-color:rgba(37,99,235,0.25);margin:0 auto 6px;"></div>
+      Waiting for first log…
+    </span>`;
+  } else {
+    logsBox.innerHTML = logs.map((log, i) => {
+      const cls = logColorClass(log);
+      const num = String(i + 1).padStart(2, "0");
+      return `<div class="log-entry">
+        <span class="log-index">${num}</span>
+        <span class="log-text ${cls}">${escapeHtml(log)}</span>
+      </div>`;
+    }).join("");
+    logsBox.scrollTop = logsBox.scrollHeight;
+  }
+}
+
+// ── Show card during polling (status badge only, logs rendered separately) ─
+function showRunningCard() {
+  const badge = document.getElementById("resultBadge");
+  document.getElementById("resultStatusText").textContent = "running";
+  badge.style.background  = "#dbeafe";
+  badge.style.borderColor = "#93c5fd";
+  badge.style.color       = "#1d4ed8";
+  document.getElementById("meetingsFetched").textContent = "…";
+  document.getElementById("newUploads").textContent      = "…";
+  resultBox.classList.remove("hidden");
+  errorBox.classList.add("hidden");
+}
+
+// ── Final result card ────────────────────────────────────────────────────
+function showResult(data) {
+  const badge = document.getElementById("resultBadge");
+  const ok    = data.status === "success";
+  document.getElementById("resultStatusText").textContent = data.status || "success";
   badge.style.background  = ok ? "#dcfce7" : "#fef9c3";
   badge.style.borderColor = ok ? "#86efac" : "#fde047";
   badge.style.color       = ok ? "#15803d" : "#a16207";
@@ -81,43 +137,7 @@ function showResult(data) {
   document.getElementById("meetingsFetched").textContent = data.meetings_fetched ?? "—";
   document.getElementById("newUploads").textContent      = data.new_uploads      ?? "—";
 
-  const logs = Array.isArray(data.logs) ? data.logs : [];
-  logsCount.textContent = `${logs.length} ${logs.length === 1 ? "entry" : "entries"}`;
-
-  logsBox.innerHTML = logs.length === 0
-    ? `<span class="logs-empty">No logs returned.</span>`
-    : logs.map((log, i) => {
-        const cls = logColorClass(log);
-        const num = String(i + 1).padStart(2, "0");
-        return `<div class="log-entry">
-          <span class="log-index">${num}</span>
-          <span class="log-text ${cls}">${escapeHtml(log)}</span>
-        </div>`;
-      }).join("");
-  logsBox.scrollTop = logsBox.scrollHeight;
-
-  resultBox.classList.remove("hidden");
-  errorBox.classList.add("hidden");
-}
-
-// ── Show "running" state while waiting ───────────────────────────────────────
-function showRunning(nextMs) {
-  const badge = document.getElementById("resultBadge");
-  document.getElementById("resultStatusText").textContent = "running";
-  badge.style.background  = "#dbeafe";
-  badge.style.borderColor = "#93c5fd";
-  badge.style.color       = "#1d4ed8";
-
-  document.getElementById("meetingsFetched").textContent = "…";
-  document.getElementById("newUploads").textContent      = "…";
-
-  const nextSec = Math.round(nextMs / 1000);
-  document.getElementById("logsCount").textContent = `next check in ${nextSec}s`;
-  document.getElementById("logs").innerHTML =
-    `<span class="logs-empty" style="color:#2563eb;">
-       <div class="spinner" style="border-top-color:#2563eb;border-color:rgba(37,99,235,0.25);margin:0 auto 6px;"></div>
-       Sync is running in the background…
-     </span>`;
+  renderLogs(Array.isArray(data.logs) ? data.logs : [], false);
 
   resultBox.classList.remove("hidden");
   errorBox.classList.add("hidden");
@@ -129,22 +149,13 @@ function showError(message) {
   resultBox.classList.add("hidden");
 }
 
-// ── Backoff polling (setTimeout-based, not setInterval) ───────────────────────
+// ── Polling ───────────────────────────────────────────────────────────────
 function stopPolling() {
-  if (pollTimer !== null) {
-    clearTimeout(pollTimer);
-    pollTimer = null;
-  }
-}
-
-function nextDelay() {
-  // Use schedule array; fall back to POLL_MAX_MS once exhausted
-  return POLL_SCHEDULE[pollCount] ?? POLL_MAX_MS;
+  if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null; }
 }
 
 function schedulePoll(jobId) {
   const delay = nextDelay();
-  showRunning(delay);
 
   pollTimer = setTimeout(async () => {
     pollCount++;
@@ -152,6 +163,7 @@ function schedulePoll(jobId) {
       const res = await fetch(STATUS_URL(jobId));
       if (!res.ok) throw new Error(`Status check failed: ${res.status}`);
       const data = await res.json();
+      const logs = Array.isArray(data.logs) ? data.logs : [];
 
       if (data.status === "success" || data.status === "error") {
         stopPolling();
@@ -162,7 +174,8 @@ function schedulePoll(jobId) {
           showResult(data);
         }
       } else {
-        // Still running — schedule next poll
+        // Still running — render partial logs NOW, then schedule next poll
+        renderLogs(logs, true);
         schedulePoll(jobId);
       }
     } catch (err) {
@@ -176,10 +189,12 @@ function schedulePoll(jobId) {
 function startPolling(jobId) {
   stopPolling();
   pollCount = 0;
+  showRunningCard();
+  renderLogs([], true);   // show empty log panel immediately
   schedulePoll(jobId);
 }
 
-// ── Main entry point ──────────────────────────────────────────────────────────
+// ── Main entry point ──────────────────────────────────────────────────────
 async function runSync() {
   clearFeedback();
   stopPolling();
