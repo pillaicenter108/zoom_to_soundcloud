@@ -311,13 +311,16 @@
     }
   });
 
-  // ── Sync logic (background job + polling) ───────────────────────────────
-  var BASE_URL   = "http://127.0.0.1:8000";
-  var SYNC_URL   = BASE_URL + "/sync";
-  var POLL_MS    = 2000;
-  var pollTimer  = null;
+  // ── Sync logic (background job + exponential backoff polling) ──────────
+  var BASE_URL      = "http://127.0.0.1:8000";
+  var SYNC_URL      = BASE_URL + "/sync";
+  var POLL_SCHEDULE = [5000, 5000, 5000, 15000, 15000, 15000]; // poll 1-3: 5s, 4-6: 15s
+  var POLL_MAX_MS   = 60000;                                    // poll 7+: 60s
+  var pollTimer     = null;
+  var pollCount     = 0;
 
   function statusUrl(jobId) { return BASE_URL + "/status/" + jobId; }
+  function nextDelay() { return POLL_SCHEDULE[pollCount] !== undefined ? POLL_SCHEDULE[pollCount] : POLL_MAX_MS; }
 
   function escapeHtml(str) {
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -340,7 +343,7 @@
       : '<svg class="btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg> Execute Sync';
   }
 
-  function showRunning() {
+  function showRunning(nextMs) {
     var badge = document.getElementById("resultBadge");
     document.getElementById("resultStatusText").textContent = "running";
     badge.style.background  = "#dbeafe";
@@ -348,7 +351,8 @@
     badge.style.color       = "#1d4ed8";
     document.getElementById("meetingsFetched").textContent = "…";
     document.getElementById("newUploads").textContent      = "…";
-    document.getElementById("logsCount").textContent       = "polling…";
+    var nextSec = Math.round(nextMs / 1000);
+    document.getElementById("logsCount").textContent = "next check in " + nextSec + "s";
     document.getElementById("logs").innerHTML =
       '<span class="logs-empty" style="color:#2563eb;">' +
         '<div class="spinner" style="border-top-color:#2563eb;border-color:rgba(37,99,235,0.25);margin:0 auto 6px;"></div>' +
@@ -387,13 +391,14 @@
   }
 
   function stopPolling() {
-    if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+    if (pollTimer !== null) { clearTimeout(pollTimer); pollTimer = null; }
   }
 
-  function startPolling(jobId) {
-    stopPolling();
-    showRunning();
-    pollTimer = setInterval(async function() {
+  function schedulePoll(jobId) {
+    var delay = nextDelay();
+    showRunning(delay);
+    pollTimer = setTimeout(async function() {
+      pollCount++;
       try {
         var res = await fetch(statusUrl(jobId));
         if (!res.ok) throw new Error("Status check failed: " + res.status);
@@ -403,14 +408,21 @@
           setLoading(false);
           if (data.status === "error") showError(data.error || "Sync failed with an unknown error.");
           else showResult(data);
+        } else {
+          schedulePoll(jobId); // still running — schedule next poll with next delay
         }
-        // "pending" / "running" → keep polling
       } catch(err) {
         stopPolling();
         setLoading(false);
         showError("Lost contact with the server while polling. " + err.message);
       }
-    }, POLL_MS);
+    }, delay);
+  }
+
+  function startPolling(jobId) {
+    stopPolling();
+    pollCount = 0;
+    schedulePoll(jobId);
   }
 
   async function runSync() {

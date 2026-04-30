@@ -1,17 +1,24 @@
-const BASE_URL    = "http://127.0.0.1:8000";
-const SYNC_URL    = `${BASE_URL}/sync`;
-const STATUS_URL  = (jobId) => `${BASE_URL}/status/${jobId}`;
-const POLL_MS     = 2000; // poll every 2 s
+const BASE_URL   = "http://127.0.0.1:8000";
+const SYNC_URL   = `${BASE_URL}/sync`;
+const STATUS_URL = (jobId) => `${BASE_URL}/status/${jobId}`;
 
-let pollTimer = null; // holds the active setInterval id
+// ── Exponential backoff schedule (stays well under 100 req/hr CF limit) ──
+// Poll 1-3  →  5s   (quick feedback for fast syncs)
+// Poll 4-6  → 15s   (medium syncs)
+// Poll 7+   → 60s   (long syncs — max ~60 req/hr)
+const POLL_SCHEDULE = [5000, 5000, 5000, 15000, 15000, 15000];
+const POLL_MAX_MS   = 60000;
 
-// ── DOM refs ────────────────────────────────────────────────────────────────
+let pollTimer = null; // active setTimeout id
+let pollCount = 0;    // number of polls fired so far
+
+// ── DOM refs ─────────────────────────────────────────────────────────────────
 const executeBtn = document.getElementById("executeBtn");
 const resultBox  = document.getElementById("resultBox");
 const errorBox   = document.getElementById("errorBox");
 const errorMsg   = document.getElementById("errorMsg");
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function getFormData() {
   return {
     zoom_account: document.querySelector('input[name="zoom_account"]:checked').value,
@@ -58,7 +65,7 @@ function logColorClass(log) {
   return "";
 }
 
-// ── Render result card ───────────────────────────────────────────────────────
+// ── Render result card ────────────────────────────────────────────────────────
 function showResult(data) {
   const badge      = document.getElementById("resultBadge");
   const statusText = document.getElementById("resultStatusText");
@@ -93,19 +100,19 @@ function showResult(data) {
   errorBox.classList.add("hidden");
 }
 
-// ── Show "running" state in the result card while polling ───────────────────
-function showRunning() {
-  const badge      = document.getElementById("resultBadge");
-  const statusText = document.getElementById("resultStatusText");
-
-  statusText.textContent  = "running";
+// ── Show "running" state while waiting ───────────────────────────────────────
+function showRunning(nextMs) {
+  const badge = document.getElementById("resultBadge");
+  document.getElementById("resultStatusText").textContent = "running";
   badge.style.background  = "#dbeafe";
   badge.style.borderColor = "#93c5fd";
   badge.style.color       = "#1d4ed8";
 
   document.getElementById("meetingsFetched").textContent = "…";
   document.getElementById("newUploads").textContent      = "…";
-  document.getElementById("logsCount").textContent       = "polling…";
+
+  const nextSec = Math.round(nextMs / 1000);
+  document.getElementById("logsCount").textContent = `next check in ${nextSec}s`;
   document.getElementById("logs").innerHTML =
     `<span class="logs-empty" style="color:#2563eb;">
        <div class="spinner" style="border-top-color:#2563eb;border-color:rgba(37,99,235,0.25);margin:0 auto 6px;"></div>
@@ -122,20 +129,25 @@ function showError(message) {
   resultBox.classList.add("hidden");
 }
 
-// ── Stop any active poll ─────────────────────────────────────────────────────
+// ── Backoff polling (setTimeout-based, not setInterval) ───────────────────────
 function stopPolling() {
   if (pollTimer !== null) {
-    clearInterval(pollTimer);
+    clearTimeout(pollTimer);
     pollTimer = null;
   }
 }
 
-// ── Poll /status/:jobId until terminal state ─────────────────────────────────
-function startPolling(jobId) {
-  stopPolling(); // safety: clear any previous timer
-  showRunning();
+function nextDelay() {
+  // Use schedule array; fall back to POLL_MAX_MS once exhausted
+  return POLL_SCHEDULE[pollCount] ?? POLL_MAX_MS;
+}
 
-  pollTimer = setInterval(async () => {
+function schedulePoll(jobId) {
+  const delay = nextDelay();
+  showRunning(delay);
+
+  pollTimer = setTimeout(async () => {
+    pollCount++;
     try {
       const res = await fetch(STATUS_URL(jobId));
       if (!res.ok) throw new Error(`Status check failed: ${res.status}`);
@@ -149,17 +161,25 @@ function startPolling(jobId) {
         } else {
           showResult(data);
         }
+      } else {
+        // Still running — schedule next poll
+        schedulePoll(jobId);
       }
-      // "pending" / "running" → keep polling
     } catch (err) {
       stopPolling();
       setLoading(false);
       showError("Lost contact with the server while polling. " + err.message);
     }
-  }, POLL_MS);
+  }, delay);
 }
 
-// ── Main entry point (called by onclick) ─────────────────────────────────────
+function startPolling(jobId) {
+  stopPolling();
+  pollCount = 0;
+  schedulePoll(jobId);
+}
+
+// ── Main entry point ──────────────────────────────────────────────────────────
 async function runSync() {
   clearFeedback();
   stopPolling();
